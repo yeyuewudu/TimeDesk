@@ -22,16 +22,12 @@ export interface TimelineEvent {
   uncertainties: string[];
 }
 
-export type TimelineGroupKey =
-  | "today"
-  | "tomorrow"
-  | "thisWeek"
-  | "nextWeek"
-  | "later"
-  | "needsReview";
+export type TimelineGroupKind = "date" | "needsReview";
 
 export interface TimelineGroup {
-  key: TimelineGroupKey;
+  key: string;
+  kind: TimelineGroupKind;
   title: string;
+  subtitle: string;
   events: TimelineEvent[];
 }

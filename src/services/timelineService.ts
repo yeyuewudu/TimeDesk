@@ -1,5 +1,5 @@
 import type { RiskLevel } from "../types/analysis";
-import type { TimelineEvent, TimelineGroup, TimelineGroupKey } from "../types/event";
+import type { TimelineEvent, TimelineGroup } from "../types/event";
 
 const riskWeight: Record<RiskLevel, number> = {
   critical: 4,
@@ -29,37 +29,54 @@ export function sortEvents(events: TimelineEvent[]) {
 }
 
 export function groupEventsByDate(events: TimelineEvent[], now = new Date()): TimelineGroup[] {
-  const groups: Record<TimelineGroupKey, TimelineEvent[]> = {
-    today: [],
-    tomorrow: [],
-    thisWeek: [],
-    nextWeek: [],
-    later: [],
-    needsReview: [],
-  };
+  const dateGroups = new Map<string, TimelineEvent[]>();
+  const needsReview: TimelineEvent[] = [];
 
   for (const event of sortEvents(events.filter((item) => item.status !== "deleted"))) {
-    const key = getGroupKey(event, now);
-    groups[key].push(event);
+    const date = new Date(event.normalized_time);
+    if (needsTimeReview(event, date)) {
+      needsReview.push(event);
+      continue;
+    }
+
+    const key = getDateKey(date);
+    dateGroups.set(key, [...(dateGroups.get(key) ?? []), event]);
   }
 
-  const timelineGroups: TimelineGroup[] = [
-    { key: "today", title: "今天", events: groups.today },
-    { key: "tomorrow", title: "明天", events: groups.tomorrow },
-    { key: "thisWeek", title: "本周", events: groups.thisWeek },
-    { key: "nextWeek", title: "下周", events: groups.nextWeek },
-    { key: "later", title: "更晚", events: groups.later },
-    { key: "needsReview", title: "待确认", events: groups.needsReview },
-  ];
+  const timelineGroups = [...dateGroups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map<TimelineGroup>(([key, groupEvents]) => {
+      const date = new Date(groupEvents[0].normalized_time);
+      return {
+        key,
+        kind: "date",
+        title: key,
+        subtitle: formatDateSubtitle(date, now),
+        events: groupEvents,
+      };
+    });
 
-  return timelineGroups.filter((group) => group.events.length > 0);
+  if (needsReview.length > 0) {
+    return [
+      {
+        key: "needs-review",
+        kind: "needsReview",
+        title: "需要确认时间",
+        subtitle: `${needsReview.length} 个节点`,
+        events: needsReview,
+      },
+      ...timelineGroups,
+    ];
+  }
+
+  return timelineGroups;
 }
 
 export function getRiskSummary(events: TimelineEvent[]) {
   const visible = events.filter((event) => event.status !== "deleted");
   const active = visible.filter((event) => event.status === "active");
-  const needsReview = active.filter(
-    (event) => event.time_granularity === "fuzzy" || event.confidence < 0.55,
+  const needsReview = active.filter((event) =>
+    needsTimeReview(event, new Date(event.normalized_time)),
   ).length;
 
   return {
@@ -74,8 +91,10 @@ export function formatEventDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -84,7 +103,7 @@ export function formatEventDateTime(value: string) {
 
 export function formatEventTime(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) return "待定";
   return new Intl.DateTimeFormat("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -92,27 +111,35 @@ export function formatEventTime(value: string) {
   }).format(date);
 }
 
-function getGroupKey(event: TimelineEvent, now: Date): TimelineGroupKey {
-  const date = new Date(event.normalized_time);
-  if (
+function formatDateSubtitle(date: Date, now: Date) {
+  const weekday = new Intl.DateTimeFormat("zh-CN", {
+    weekday: "short",
+  }).format(date);
+  const relative = getRelativeDayLabel(date, now);
+  return relative ? `${weekday} · ${relative}` : weekday;
+}
+
+function getRelativeDayLabel(date: Date, now: Date) {
+  const startToday = startOfDay(now);
+  const startTomorrow = addDays(startToday, 1);
+  const dayDiff = Math.round((startOfDay(date).getTime() - startToday.getTime()) / 86_400_000);
+
+  if (dayDiff === 0) return "今天";
+  if (dayDiff === 1) return "明天";
+  if (dayDiff === 2) return "后天";
+  if (dayDiff > 2 && dayDiff < 7) return `${dayDiff} 天后`;
+  if (dayDiff === -1) return "昨天";
+  if (dayDiff < -1 && dayDiff > -7) return `${Math.abs(dayDiff)} 天前`;
+  if (startOfDay(date).getTime() === startTomorrow.getTime()) return "明天";
+  return "";
+}
+
+function needsTimeReview(event: TimelineEvent, date: Date) {
+  return (
     event.time_granularity === "fuzzy" ||
     event.confidence < 0.55 ||
     Number.isNaN(date.getTime())
-  ) {
-    return "needsReview";
-  }
-
-  const startToday = startOfDay(now);
-  const startTomorrow = addDays(startToday, 1);
-  const startAfterTomorrow = addDays(startToday, 2);
-  const startNextWeek = addDays(startToday, 7 - getMondayBasedDay(now) + 1);
-  const startWeekAfterNext = addDays(startNextWeek, 7);
-
-  if (date >= startToday && date < startTomorrow) return "today";
-  if (date >= startTomorrow && date < startAfterTomorrow) return "tomorrow";
-  if (date >= startAfterTomorrow && date < startNextWeek) return "thisWeek";
-  if (date >= startNextWeek && date < startWeekAfterNext) return "nextWeek";
-  return "later";
+  );
 }
 
 function getEventTime(event: TimelineEvent) {
@@ -130,7 +157,7 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-function getMondayBasedDay(date: Date) {
-  const day = date.getDay();
-  return day === 0 ? 7 : day;
+function getDateKey(date: Date) {
+  const pad = (input: number) => input.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }

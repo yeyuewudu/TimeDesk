@@ -22,9 +22,9 @@ const typeLabels: Record<TimelineEvent["event_type"], string> = {
 };
 
 const riskLabels: Record<TimelineEvent["risk_level"], string> = {
-  low: "低",
-  medium: "中",
-  high: "高",
+  low: "普通",
+  medium: "关注",
+  high: "高优先",
   critical: "紧急",
 };
 
@@ -84,7 +84,7 @@ export default function EventDetailDrawer({
 
       <div className="detail-grid">
         <div>
-          <span className="detail-label">风险</span>
+          <span className="detail-label">注意级别</span>
           <p>{riskLabels[event.risk_level]}</p>
         </div>
         <div>

@@ -107,7 +107,9 @@ export default function InputPanel({ settings, onAddEvents }: InputPanelProps) {
     return (
       <div className="input-entry">
         <button className="input-entry__button" type="button" onClick={() => setIsOpen(true)}>
-          粘贴消息、通知、邮件，或上传 PDF / Word
+          <span aria-hidden="true">+</span>
+          <strong>粘贴消息、通知、邮件</strong>
+          <small>PDF / Word</small>
         </button>
       </div>
     );

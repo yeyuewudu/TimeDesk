@@ -18,8 +18,11 @@ export default function TimelineWidget({ events, onOpenEvent }: TimelineWidgetPr
   return (
     <section className="timeline" aria-label="时间轴">
       {groups.map((group) => (
-        <div className="timeline__group" key={group.key}>
-          <h2 className="timeline__heading">{group.title}</h2>
+        <div className={`timeline__group timeline__group--${group.kind}`} key={group.key}>
+          <header className="timeline__heading">
+            <h2>{group.title}</h2>
+            <span>{group.subtitle}</span>
+          </header>
           <div className="timeline__events">
             {group.events.map((event) => (
               <EventCard event={event} key={event.id} onOpen={onOpenEvent} />

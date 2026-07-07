@@ -86,8 +86,8 @@ export default function App() {
       </header>
 
       <section className="status-strip" aria-label="时间轴摘要">
-        <span>{summary.active} 个待处理节点</span>
-        <span>{summary.needsReview} 个待确认</span>
+        <span>{summary.active} 个待办</span>
+        <span>{summary.needsReview} 个需确认</span>
       </section>
 
       <TimelineWidget events={events} onOpenEvent={(event) => setSelectedEventId(event.id)} />
